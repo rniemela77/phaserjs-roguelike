@@ -1,3 +1,5 @@
+import MainScene from './scenes/MainScene.js';
+
 const config = {
     type: Phaser.AUTO,
     width: 800,
@@ -21,3 +23,5 @@ const config = {
         },  
     }
 }; 
+
+export default config; 
