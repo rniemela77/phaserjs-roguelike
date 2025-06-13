@@ -61,6 +61,10 @@ class MainScene extends Phaser.Scene {
 
         this.cursors = this.input.keyboard.createCursorKeys();
         this.updateVisibility();
+
+        // Set camera zoom and follow the player
+        this.cameras.main.setZoom(1.5);
+        this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
     }
 
     generateDungeon() {
