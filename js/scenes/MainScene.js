@@ -12,6 +12,8 @@ class MainScene extends Phaser.Scene {
         this.canMove = true;
         this.fogGraphics = null;
         this.walls = [];
+        this.enemy = null;
+        this.storedPlayerPosition = null;
     }
 
     create() {
@@ -43,6 +45,19 @@ class MainScene extends Phaser.Scene {
             0x00ff00
         );
         this.player.setDepth(2);
+
+        const enemyPosition = {
+            x: Phaser.Math.Clamp(start.x + 2, 0, this.gridWidth - 1),
+            y: Phaser.Math.Clamp(start.y + 2, 0, this.gridHeight - 1)
+        };
+        this.enemy = this.add.rectangle(
+            enemyPosition.x * this.gridSize + this.gridSize / 2,
+            enemyPosition.y * this.gridSize + this.gridSize / 2,
+            this.gridSize - 4,
+            this.gridSize - 4,
+            0xff0000
+        );
+        this.enemy.setDepth(2);
 
         this.cursors = this.input.keyboard.createCursorKeys();
         this.updateVisibility();
@@ -209,6 +224,36 @@ class MainScene extends Phaser.Scene {
             this.canMove = false;
             this.time.delayedCall(100, () => { this.canMove = true; });
         }
+
+        if (this.enemy && Phaser.Geom.Intersects.RectangleToRectangle(this.player.getBounds(), this.enemy.getBounds())) {
+            this.startRhythmGame();
+        }
+    }
+
+    pauseScene() {
+        this.storedPlayerPosition = { x: this.player.x, y: this.player.y };
+        this.scene.pause();
+    }
+
+    startRhythmGame() {
+        this.pauseScene();
+        this.scene.launch('RhythmGameScene', { mainScene: this });
+    }
+
+    removeEnemy() {
+        if (this.enemy) {
+            this.enemy.destroy();
+            this.enemy = null;
+        }
+    }
+
+    resumeScene(playerWon) {
+        if (playerWon) {
+            this.removeEnemy();
+        }
+        this.player.x = this.storedPlayerPosition.x;
+        this.player.y = this.storedPlayerPosition.y;
+        this.scene.resume();
     }
 }
 
