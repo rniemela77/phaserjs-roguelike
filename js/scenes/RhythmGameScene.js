@@ -5,6 +5,10 @@ class RhythmGameScene extends Phaser.Scene {
         this.currentCommandIndex = 0;
         this.commandText = null;
         this.commandTimer = null;
+        this.ball = null;
+        this.line = null;
+        this.hitArea = null;
+        this.ballTween = null;
     }
 
     preload() {
@@ -33,21 +37,41 @@ class RhythmGameScene extends Phaser.Scene {
 
         const command = this.commands[this.currentCommandIndex];
         if (this.commandText) this.commandText.destroy();
-        this.commandText = this.add.text(400, 300, command, { fontSize: '48px', fill: '#fff' }).setOrigin(0.5);
+        this.commandText = this.add.text(400, 50, command, { fontSize: '48px', fill: '#fff' }).setOrigin(0.5);
 
-        this.commandTimer = this.time.delayedCall(2000, () => {
-            this.endGame(false);
+        this.createLineAndBall();
+    }
+
+    createLineAndBall() {
+        if (this.line) this.line.destroy();
+        if (this.ball) this.ball.destroy();
+        if (this.hitArea) this.hitArea.destroy();
+
+        this.line = this.add.rectangle(400, 300, 600, 5, 0xffffff);
+        this.hitArea = this.add.rectangle(700, 300, 50, 50, 0xff0000, 0.5);
+        this.ball = this.add.circle(100, 300, 10, 0x00ff00);
+
+        this.ballTween = this.tweens.add({
+            targets: this.ball,
+            x: 750,
+            duration: 2000,
+            onComplete: () => this.endGame(false)
         });
     }
 
     handleInput(event) {
-        if (event.key === this.commands[this.currentCommandIndex]) {
+        if (event.key === this.commands[this.currentCommandIndex] && this.isBallInHitArea()) {
             this.currentCommandIndex++;
-            this.commandTimer.remove();
+            this.ballTween.stop();
+            this.ball.destroy();
             this.displayNextCommand();
-        } else {
+        } else if (!this.isBallInHitArea()) {
             this.endGame(false);
         }
+    }
+
+    isBallInHitArea() {
+        return Phaser.Geom.Intersects.RectangleToRectangle(this.ball.getBounds(), this.hitArea.getBounds());
     }
 
     endGame(success) {
