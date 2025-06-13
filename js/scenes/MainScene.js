@@ -2,19 +2,21 @@ class MainScene extends Phaser.Scene {
     constructor() {
         super({ key: 'MainScene' });
         this.gridSize = 32;
+        this.gridWidth = Math.floor(800 / this.gridSize);
+        this.gridHeight = Math.floor(600 / this.gridSize);
+        this.grid = Array(this.gridHeight).fill().map(() => Array(this.gridWidth).fill(1)); // 1 = wall, 0 = floor
+        this.visibilityGrid = Array(this.gridHeight).fill().map(() => Array(this.gridWidth).fill(false));
+        this.visionRange = 3;
         this.player = null;
         this.cursors = null;
         this.canMove = true;
-        this.walls = [];
-        this.gridWidth = Math.floor(800 / this.gridSize);
-        this.gridHeight = Math.floor(600 / this.gridSize);
-        this.grid = Array(this.gridHeight).fill().map(() => Array(this.gridWidth).fill(0));
-        this.visibilityGrid = Array(this.gridHeight).fill().map(() => Array(this.gridWidth).fill(false));
-        this.visionRange = 3;
         this.fogGraphics = null;
+        this.walls = [];
     }
 
     create() {
+        this.generateDungeon();
+
         const graphics = this.add.graphics();
         graphics.lineStyle(1, 0x333333);
         for (let x = 0; x < this.game.config.width; x += this.gridSize) {
@@ -30,11 +32,12 @@ class MainScene extends Phaser.Scene {
         this.fogGraphics = this.add.graphics();
         this.fogGraphics.setDepth(0);
 
-        this.createWalls();
+        this.drawWalls();
 
+        const start = this.findFirstFloor();
         this.player = this.add.rectangle(
-            this.gridSize / 2,
-            this.gridSize / 2,
+            start.x * this.gridSize + this.gridSize / 2,
+            start.y * this.gridSize + this.gridSize / 2,
             this.gridSize - 4,
             this.gridSize - 4,
             0x00ff00
@@ -42,85 +45,129 @@ class MainScene extends Phaser.Scene {
         this.player.setDepth(2);
 
         this.cursors = this.input.keyboard.createCursorKeys();
-
         this.updateVisibility();
     }
 
-    createWalls() {
-        for (let i = 0; i < 30; i++) {
-            const x = Phaser.Math.Between(0, this.gridWidth - 1);
-            const y = Phaser.Math.Between(0, this.gridHeight - 1);
-            if (x === 0 && y === 0) continue;
-            this.grid[y][x] = 1;
-            const wall = this.add.rectangle(
-                x * this.gridSize + this.gridSize / 2,
-                y * this.gridSize + this.gridSize / 2,
-                this.gridSize - 4,
-                this.gridSize - 4,
-                0xff0000
-            );
-            wall.visible = false;
-            wall.setDepth(1);
-            this.walls.push({ x, y, sprite: wall });
+    generateDungeon() {
+        const maxRooms = 8;
+        const roomMin = 3;
+        const roomMax = 8;
+        let rooms = [];
+
+        for (let i = 0; i < maxRooms; i++) {
+            const w = Phaser.Math.Between(roomMin, roomMax);
+            const h = Phaser.Math.Between(roomMin, roomMax);
+            const x = Phaser.Math.Between(1, this.gridWidth - w - 1);
+            const y = Phaser.Math.Between(1, this.gridHeight - h - 1);
+            const newRoom = { x, y, w, h };
+
+            let overlaps = rooms.some(r => (
+                x < r.x + r.w + 1 && x + w + 1 > r.x &&
+                y < r.y + r.h + 1 && y + h + 1 > r.y
+            ));
+            if (overlaps) continue;
+
+            this.carveRoom(newRoom);
+
+            if (rooms.length > 0) {
+                const prev = Phaser.Utils.Array.GetRandom(rooms);
+                const prevCenter = { x: Math.floor(prev.x + prev.w / 2), y: Math.floor(prev.y + prev.h / 2) };
+                const newCenter = { x: Math.floor(x + w / 2), y: Math.floor(y + h / 2) };
+                this.carveCorridor(prevCenter, newCenter);
+            }
+
+            rooms.push(newRoom);
         }
     }
 
-    isWall(x, y) {
-        const gridX = Math.floor(x / this.gridSize);
-        const gridY = Math.floor(y / this.gridSize);
-        if (gridX < 0 || gridX >= this.gridWidth || gridY < 0 || gridY >= this.gridHeight) {
-            return true;
-        }
-        return this.grid[gridY][gridX] === 1;
-    }
-
-    updateVisibility() {
-        for (let y = 0; y < this.gridHeight; y++) {
-            for (let x = 0; x < this.gridWidth; x++) {
-                this.visibilityGrid[y][x] = false;
+    carveRoom(room) {
+        for (let i = room.y; i < room.y + room.h; i++) {
+            for (let j = room.x; j < room.x + room.w; j++) {
+                this.grid[i][j] = 0;
             }
         }
+    }
 
-        const playerGridX = Math.floor(this.player.x / this.gridSize);
-        const playerGridY = Math.floor(this.player.y / this.gridSize);
+    carveCorridor(a, b) {
+        let x = a.x;
+        let y = a.y;
+        while (x !== b.x) {
+            this.grid[y][x] = 0;
+            x += x < b.x ? 1 : -1;
+        }
+        while (y !== b.y) {
+            this.grid[y][x] = 0;
+            y += y < b.y ? 1 : -1;
+        }
+    }
 
-        for (let dy = -this.visionRange; dy <= this.visionRange; dy++) {
-            for (let dx = -this.visionRange; dx <= this.visionRange; dx++) {
-                const tx = playerGridX + dx;
-                const ty = playerGridY + dy;
-                if (tx < 0 || tx >= this.gridWidth || ty < 0 || ty >= this.gridHeight) continue;
-                if (this.hasLineOfSight(playerGridX, playerGridY, tx, ty)) {
-                    this.visibilityGrid[ty][tx] = true;
+    drawWalls() {
+        for (let y = 0; y < this.gridHeight; y++) {
+            for (let x = 0; x < this.gridWidth; x++) {
+                if (this.grid[y][x] === 1) {
+                    const wall = this.add.rectangle(
+                        x * this.gridSize + this.gridSize / 2,
+                        y * this.gridSize + this.gridSize / 2,
+                        this.gridSize - 4,
+                        this.gridSize - 4,
+                        0xff0000
+                    );
+                    wall.visible = false;
+                    wall.setDepth(1);
+                    this.walls.push({ x, y, sprite: wall });
                 }
             }
         }
+    }
 
-        this.walls.forEach(w => {
-            w.sprite.visible = this.visibilityGrid[w.y][w.x];
-        });
+    findFirstFloor() {
+        for (let y = 0; y < this.gridHeight; y++) {
+            for (let x = 0; x < this.gridWidth; x++) {
+                if (this.grid[y][x] === 0) return { x, y };
+            }
+        }
+        return { x: 1, y: 1 };
+    }
 
+    isWall(x, y) {
+        const gx = Math.floor(x / this.gridSize);
+        const gy = Math.floor(y / this.gridSize);
+        if (gx < 0 || gx >= this.gridWidth || gy < 0 || gy >= this.gridHeight) return true;
+        return this.grid[gy][gx] === 1;
+    }
+
+    updateVisibility() {
+        for (let y = 0; y < this.gridHeight; y++)
+            for (let x = 0; x < this.gridWidth; x++)
+                this.visibilityGrid[y][x] = false;
+
+        const pgx = Math.floor(this.player.x / this.gridSize);
+        const pgy = Math.floor(this.player.y / this.gridSize);
+
+        for (let dy = -this.visionRange; dy <= this.visionRange; dy++) {
+            for (let dx = -this.visionRange; dx <= this.visionRange; dx++) {
+                const tx = pgx + dx;
+                const ty = pgy + dy;
+                if (tx < 0 || tx >= this.gridWidth || ty < 0 || ty >= this.gridHeight) continue;
+                if (this.hasLineOfSight(pgx, pgy, tx, ty))
+                    this.visibilityGrid[ty][tx] = true;
+            }
+        }
+
+        this.walls.forEach(w => w.sprite.visible = this.visibilityGrid[w.y][w.x]);
         this.renderFogOfWar();
     }
 
     hasLineOfSight(x1, y1, x2, y2) {
-        let dx = Math.abs(x2 - x1);
-        let dy = Math.abs(y2 - y1);
-        let sx = x1 < x2 ? 1 : -1;
-        let sy = y1 < y2 ? 1 : -1;
+        let dx = Math.abs(x2 - x1), dy = Math.abs(y2 - y1);
+        let sx = x1 < x2 ? 1 : -1, sy = y1 < y2 ? 1 : -1;
         let err = dx - dy;
-
         while (true) {
             if (x1 === x2 && y1 === y2) break;
             if (this.grid[y1][x1] === 1) return false;
-            let e2 = 2 * err;
-            if (e2 > -dy) {
-                err -= dy;
-                x1 += sx;
-            }
-            if (e2 < dx) {
-                err += dx;
-                y1 += sy;
-            }
+            let e2 = err * 2;
+            if (e2 > -dy) { err -= dy; x1 += sx; }
+            if (e2 < dx) { err += dx; y1 += sy; }
         }
         return true;
     }
@@ -145,18 +192,18 @@ class MainScene extends Phaser.Scene {
     update() {
         if (!this.canMove) return;
         let moved = false;
-        let newX = this.player.x;
-        let newY = this.player.y;
+        let nx = this.player.x;
+        let ny = this.player.y;
 
-        if (this.cursors.left.isDown)      { newX -= this.gridSize; moved = true; }
-        else if (this.cursors.right.isDown){ newX += this.gridSize; moved = true; }
-        else if (this.cursors.up.isDown)   { newY -= this.gridSize; moved = true; }
-        else if (this.cursors.down.isDown) { newY += this.gridSize; moved = true; }
+        if (this.cursors.left.isDown)      { nx -= this.gridSize; moved = true; }
+        else if (this.cursors.right.isDown){ nx += this.gridSize; moved = true; }
+        else if (this.cursors.up.isDown)   { ny -= this.gridSize; moved = true; }
+        else if (this.cursors.down.isDown) { ny += this.gridSize; moved = true; }
 
         if (moved) {
-            if (!this.isWall(newX, newY)) {
-                this.player.x = Phaser.Math.Clamp(newX, this.gridSize/2, this.game.config.width - this.gridSize/2);
-                this.player.y = Phaser.Math.Clamp(newY, this.gridSize/2, this.game.config.height - this.gridSize/2);
+            if (!this.isWall(nx, ny)) {
+                this.player.x = Phaser.Math.Clamp(nx, this.gridSize/2, this.game.config.width - this.gridSize/2);
+                this.player.y = Phaser.Math.Clamp(ny, this.gridSize/2, this.game.config.height - this.gridSize/2);
             }
             this.updateVisibility();
             this.canMove = false;
