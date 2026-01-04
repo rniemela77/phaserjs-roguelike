@@ -1,12 +1,13 @@
 import MainScene from './scenes/MainScene.js';
 import RhythmGameScene from './scenes/RhythmGameScene.js';
+import FightScene from './scenes/FightScene.js';
 
 const config = {
     type: Phaser.AUTO,
     width: 800,
     height: 600,
     backgroundColor: '#1a1a1a',
-    scene: [MainScene, RhythmGameScene],
+    scene: [FightScene],
     physics: {
         default: 'arcade',
         arcade: {
@@ -16,12 +17,10 @@ const config = {
     scale: {
         mode: Phaser.Scale.FIT,
         parent: 'game',
-        width: 800,
-        height: 600,
-        min: {
-            width: 320,
-            height: 240
-        },  
+        // full screen
+        width: window.innerWidth,
+        height: window.innerHeight,
+        autoCenter: Phaser.Scale.CENTER_BOTH
     }
 }; 
 
