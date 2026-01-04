@@ -7,7 +7,13 @@ class FightScene extends Phaser.Scene {
         this.aimScale = 3.0; // Start large
         this.minScale = 0.5; // The "Perfect" size
         this.enemyHealth = 100;
+        this.playerHealth = 100;
         this.isGameOver = false;
+        // Enemy swing timer (attacks when it reaches 100%)
+        this.enemySwingElapsedMs = 0;
+        this.enemySwingDurationMs = 4000;
+        this.enemySwingBarWidth = 160;
+        this.enemySwingBarHeight = 8;
         // Pointer-driven aiming + drift (sniping)
         this.aimDriftOffsetX = 0;
         this.aimDriftOffsetY = 0;
@@ -52,11 +58,31 @@ class FightScene extends Phaser.Scene {
             fill: '#fff' 
         }).setOrigin(0.5);
 
-        this.hpText = this.add.text(width / 2, height * 0.7, `HP: ${this.enemyHealth}`, { 
+        this.combatText = this.add.text(width / 2, height * 0.16, '', {
+            fontSize: '18px',
+            fontFamily: UI_FONT_FAMILY,
+            fill: '#fff'
+        }).setOrigin(0.5);
+
+        this.enemyHpText = this.add.text(width / 2, height * 0.7, `ENEMY HP: ${this.enemyHealth}`, { 
             fontSize: '24px', 
             fontFamily: UI_FONT_FAMILY,
             fill: '#ff0000' 
         }).setOrigin(0.5);
+
+        this.playerHpText = this.add.text(width / 2, height * 0.75, `PLAYER HP: ${this.playerHealth}`, {
+            fontSize: '24px',
+            fontFamily: UI_FONT_FAMILY,
+            fill: '#00ff66'
+        }).setOrigin(0.5);
+
+        // Enemy swing bar (red) - positioned in update to stay above enemy
+        this.enemySwingBarBg = this.add.rectangle(0, 0, this.enemySwingBarWidth, this.enemySwingBarHeight, 0x300000)
+            .setOrigin(0.5, 0.5)
+            .setDepth(10);
+        this.enemySwingBarFill = this.add.rectangle(0, 0, this.enemySwingBarWidth, this.enemySwingBarHeight, 0xff0000)
+            .setOrigin(0, 0.5)
+            .setDepth(11);
 
         // 3. The Aiming Circle (The core mechanic UI)
         this.aimCircle = this.add.circle(width / 2, height * 0.4, 50);
@@ -96,6 +122,10 @@ class FightScene extends Phaser.Scene {
     }
 
     update(time, delta) {
+        if (!this.isGameOver) {
+            this.updateEnemySwing(delta);
+        }
+
         if (this.isAiming && !this.isGameOver) {
             // Shrink the circle over time (slow -> fast ramp, frame-rate independent)
             this.aimHoldElapsedMs += delta;
@@ -152,6 +182,47 @@ class FightScene extends Phaser.Scene {
         }
     }
 
+    updateEnemySwing(delta) {
+        // Advance timer
+        this.enemySwingElapsedMs += delta;
+        const progress = Phaser.Math.Clamp(this.enemySwingElapsedMs / this.enemySwingDurationMs, 0, 1);
+
+        // Keep bar anchored above enemy
+        const enemyTopY = this.enemy.y - (this.enemy.displayHeight / 2);
+        const barY = enemyTopY - 14;
+        const barX = this.enemy.x;
+        this.enemySwingBarBg.setPosition(barX, barY);
+        const leftX = barX - (this.enemySwingBarWidth / 2);
+        this.enemySwingBarFill.setPosition(leftX, barY);
+        this.enemySwingBarFill.scaleX = progress;
+
+        // Attack at 100%, then reset
+        if (progress >= 1) {
+            this.enemySwingElapsedMs = 0;
+            this.enemyAttack();
+        }
+    }
+
+    enemyAttack() {
+        if (this.isGameOver) return;
+
+        const pointerDown = !!this.input?.activePointer?.isDown;
+        if (pointerDown) {
+            this.playerHealth -= 10;
+            this.playerHpText.setText(`PLAYER HP: ${this.playerHealth}`);
+            this.combatText.setText('HIT! (You were holding when it swung)');
+            this.cameras.main.flash(120, 120, 0, 0);
+            this.cameras.main.shake(120, 0.01);
+            if (navigator.vibrate) navigator.vibrate(60);
+
+            if (this.playerHealth <= 0) {
+                this.loseGame();
+            }
+        } else {
+            this.combatText.setText('DODGED! (Not holding when it swung)');
+        }
+    }
+
     startAiming(pointer) {
         if (this.isGameOver) return;
         this.isAiming = true;
@@ -181,6 +252,7 @@ class FightScene extends Phaser.Scene {
         // Reticle starts centered on the enemy
         this.aimCircle.setPosition(this.enemy.x, this.enemy.y);
         this.statusText.setText("FOCUS...");
+        this.combatText.setText('');
 
         this.aimFadeTween = this.tweens.add({
             targets: this.aimCircle,
@@ -225,16 +297,15 @@ class FightScene extends Phaser.Scene {
 
     hitEnemy() {
         this.enemyHealth -= 25;
-        this.hpText.setText(`HP: ${this.enemyHealth}`);
+        this.enemyHpText.setText(`ENEMY HP: ${this.enemyHealth}`);
 
-        // 2. ADD: Heavy Impact Vibration
-        // A single, strong 100ms vibration feels like a solid thud.
-        if (navigator.vibrate) navigator.vibrate(100);
+        if (navigator.vibrate) navigator.vibrate(50);
         
         // Juice: Screen Shake & Enemy Tint
         this.cameras.main.shake(200, 0.02);
         this.enemy.setTint(0xff0000);
         this.statusText.setText("DIRECT HIT!");
+        this.combatText.setText('');
 
         this.time.delayedCall(200, () => this.enemy.clearTint());
 
@@ -247,17 +318,34 @@ class FightScene extends Phaser.Scene {
         this.isAiming = false;
         if (this.aimFadeTween) this.aimFadeTween.stop();
         this.statusText.setText(reason);
-        this.cameras.main.flash(500, 100, 0, 0); // Red flash for failure
+        this.combatText.setText('');
+        this.cameras.main.flash(200, 50, 0, 0); // Red flash for failure
 
         // 3. ADD: Failure Vibration
         // A "Double-Thud" (50ms on, 50ms off, 50ms on) signals a mistake.
-        if (navigator.vibrate) navigator.vibrate([30, 70, 30]);
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    }
+
+    loseGame() {
+        this.isGameOver = true;
+        this.statusText.setText("DEFEATED");
+        this.combatText.setText('');
+        this.enemySwingBarBg.setVisible(false);
+        this.enemySwingBarFill.setVisible(false);
+        this.add.text(this.scale.width/2, this.scale.height/2, "GAME OVER", {
+            fontSize: '64px',
+            fontFamily: UI_FONT_FAMILY,
+            fill: '#ff4444'
+        }).setOrigin(0.5);
     }
 
     winGame() {
         this.isGameOver = true;
         this.statusText.setText("TARGET ELIMINATED");
+        this.combatText.setText('');
         this.enemy.setAlpha(0.5);
+        this.enemySwingBarBg.setVisible(false);
+        this.enemySwingBarFill.setVisible(false);
         this.add.text(this.scale.width/2, this.scale.height/2, "VICTORY", {
             fontSize: '64px',
             fontFamily: UI_FONT_FAMILY,
