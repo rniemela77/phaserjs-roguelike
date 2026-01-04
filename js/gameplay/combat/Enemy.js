@@ -33,6 +33,11 @@ export default class Enemy extends Combatant {
         this.swingBarFill.setVisible(visible);
     }
 
+    destroy() {
+        this.swingBarBg?.destroy();
+        this.swingBarFill?.destroy();
+    }
+
     resetSwing() {
         this.swingElapsedMs = 0;
         this.swingBarFill.scaleX = 0;
