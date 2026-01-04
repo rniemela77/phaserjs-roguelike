@@ -1,5 +1,3 @@
-import MainScene from './scenes/MainScene.js';
-import RhythmGameScene from './scenes/RhythmGameScene.js';
 import FightScene from './scenes/FightScene.js';
 
 const config = {
