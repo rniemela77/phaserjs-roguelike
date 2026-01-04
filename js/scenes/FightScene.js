@@ -1,3 +1,5 @@
+import { UI_FONT_FAMILY } from '../ui/theme.js';
+
 class FightScene extends Phaser.Scene {
     constructor() {
         super('MyGame');
@@ -12,7 +14,7 @@ class FightScene extends Phaser.Scene {
         this.aimShrinkRateStart = 0.05; // scale units per second (slow)
         this.aimShrinkRateEnd = 5; // scale units per second (fast)
         // Sweet spot is when aim circle radius matches the static ring (in pixels)
-        this.sweetSpotTolerancePx = 7;
+        this.sweetSpotTolerancePx = 10;
         // Aim circle visual: fade in from 0 -> 1 when aiming starts
         this.aimFadeInMs = 3000;
         this.aimFadeTween = null;
@@ -33,11 +35,13 @@ class FightScene extends Phaser.Scene {
         // 2. Setup UI Elements
         this.statusText = this.add.text(width / 2, height * 0.1, 'HOLD TO AIM', { 
             fontSize: '32px', 
+            fontFamily: UI_FONT_FAMILY,
             fill: '#fff' 
         }).setOrigin(0.5);
 
         this.hpText = this.add.text(width / 2, height * 0.7, `HP: ${this.enemyHealth}`, { 
             fontSize: '24px', 
+            fontFamily: UI_FONT_FAMILY,
             fill: '#ff0000' 
         }).setOrigin(0.5);
 
@@ -71,9 +75,9 @@ class FightScene extends Phaser.Scene {
             const targetRadiusPx = this.targetRing.radius * this.targetRing.scaleX;
             const inSweetSpot = Math.abs(aimRadiusPx - targetRadiusPx) <= this.sweetSpotTolerancePx;
             if (inSweetSpot) {
-                this.aimCircle.setStrokeStyle(6, 0x00ff00); // Green for "Ready"            
+                this.aimCircle.setStrokeStyle(16, 0x00ff00); // Green for "Ready"            
             } else {
-                this.aimCircle.setStrokeStyle(4, 0xffffff);
+                this.aimCircle.setStrokeStyle(2, 0xffffff);
             }
 
             // Failure condition: Held too long
@@ -160,7 +164,11 @@ class FightScene extends Phaser.Scene {
         this.isGameOver = true;
         this.statusText.setText("TARGET ELIMINATED");
         this.enemy.setAlpha(0.5);
-        this.add.text(this.scale.width/2, this.scale.height/2, "VICTORY", { fontSize: '64px' }).setOrigin(0.5);
+        this.add.text(this.scale.width/2, this.scale.height/2, "VICTORY", {
+            fontSize: '64px',
+            fontFamily: UI_FONT_FAMILY,
+            fill: '#fff'
+        }).setOrigin(0.5);
     }
 }
 

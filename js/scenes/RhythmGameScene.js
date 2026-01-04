@@ -1,3 +1,5 @@
+import { UI_FONT_FAMILY } from '../ui/theme.js';
+
 class RhythmGameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'RhythmGameScene' });
@@ -37,7 +39,11 @@ class RhythmGameScene extends Phaser.Scene {
 
         const command = this.commands[this.currentCommandIndex];
         if (this.commandText) this.commandText.destroy();
-        this.commandText = this.add.text(400, 50, command, { fontSize: '48px', fill: '#fff' }).setOrigin(0.5);
+        this.commandText = this.add.text(400, 50, command, {
+            fontSize: '48px',
+            fontFamily: UI_FONT_FAMILY,
+            fill: '#fff'
+        }).setOrigin(0.5);
 
         this.createLineAndBall();
     }
